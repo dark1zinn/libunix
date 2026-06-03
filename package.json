@@ -24,6 +24,9 @@
   "type": "module",
   "dependencies": {},
   "scripts": {},
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },

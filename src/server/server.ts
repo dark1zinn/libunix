@@ -3,6 +3,7 @@ import type { TransportAdapter, TransportListenHandle } from "../transport/adapt
 import type { ServerOptions } from "../types.ts";
 import { resolveSocketPath } from "../utils/path.ts";
 import { LibunixError } from "../utils/errors.ts";
+import { registerLifecycle, unregisterLifecycle } from "../utils/lifecycle.ts";
 import { prepareSocketPath } from "./socket-hygiene.ts";
 import { createTransportAdapter } from "./transport-factory.ts";
 import { RemotePeer } from "./peer.ts";
@@ -18,6 +19,10 @@ export class Server<IncomingEvents extends Record<string, unknown> = Record<stri
 
   private listener: TransportListenHandle | undefined;
   private closed = false;
+  private readonly lifecycleParticipant = {
+    close: () => this.close(),
+    disposeSync: () => this.syncDispose(),
+  };
 
   private constructor(
     private readonly options: ServerOptions,
@@ -34,6 +39,7 @@ export class Server<IncomingEvents extends Record<string, unknown> = Record<stri
 
     const server = new Server<T>(options, socketPath, transport);
     server.start();
+    registerLifecycle(server.lifecycleParticipant);
     return server;
   }
 
@@ -67,6 +73,21 @@ export class Server<IncomingEvents extends Record<string, unknown> = Record<stri
     this.listener?.close(true);
     this.listener = undefined;
 
+    this.unlinkSocketFile();
+
+    unregisterLifecycle(this.lifecycleParticipant);
+  }
+
+  private syncDispose(): void {
+    if (this.closed) {
+      return;
+    }
+    this.listener?.close(true);
+    this.listener = undefined;
+    this.unlinkSocketFile();
+  }
+
+  private unlinkSocketFile(): void {
     if (existsSync(this.socketPath)) {
       try {
         unlinkSync(this.socketPath);

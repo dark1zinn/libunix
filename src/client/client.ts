@@ -9,6 +9,7 @@ import {
   nextCorrelationId,
 } from "../utils/correlation.ts";
 import { LibunixError, isLibunixError } from "../utils/errors.ts";
+import { registerLifecycle, unregisterLifecycle } from "../utils/lifecycle.ts";
 import { resolveSocketPath } from "../utils/path.ts";
 import { createTransportAdapter } from "../server/transport-factory.ts";
 import { connectWithRetry } from "./reconnect.ts";
@@ -24,6 +25,9 @@ export class Client<OutgoingEvents extends Record<string, unknown> = Record<stri
 
   private socket: TransportSocket | undefined;
   private disconnected = false;
+  private readonly lifecycleParticipant = {
+    close: () => this.disconnect(),
+  };
 
   private constructor(
     private readonly options: ClientOptions,
@@ -38,6 +42,7 @@ export class Client<OutgoingEvents extends Record<string, unknown> = Record<stri
     const socketPath = resolveSocketPath(options.id);
     const client = new Client<T>(options, socketPath, transport);
     await client.establishConnection();
+    registerLifecycle(client.lifecycleParticipant);
     return client;
   }
 
@@ -84,6 +89,8 @@ export class Client<OutgoingEvents extends Record<string, unknown> = Record<stri
       await this.transport.close(this.socket);
       this.socket = undefined;
     }
+
+    unregisterLifecycle(this.lifecycleParticipant);
   }
 
   private async establishConnection(): Promise<void> {
