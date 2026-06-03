@@ -1,5 +1,25 @@
 {
   "name": "libunix",
+  "author": "dark1zinn",
+  "license": "MIT",
+  "version": "0.0.1",
+  "description": "A abstraction-layer library for managing Unix Domain Sockets (UDS).",
+  "keywords": [
+    "unix",
+    "domain",
+    "socket",
+    "uds",
+    "network",
+    "communication"
+  ],
+  "homepage": "https://github.com/dark1zinn/libunix",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dark1zinn/libunix.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dark1zinn/libunix/issues"
+  },
   "module": "src/index.ts",
   "type": "module",
   "devDependencies": {
