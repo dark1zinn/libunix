@@ -1,36 +1,40 @@
 {
-  "name": "libunix",
-  "author": "dark1zinn",
-  "license": "MIT",
-  "version": "0.1.0",
-  "description": "A abstraction-layer library for managing Unix Domain Sockets (UDS).",
-  "keywords": [
-    "unix",
-    "domain",
-    "socket",
-    "uds",
-    "network",
-    "communication"
-  ],
-  "homepage": "https://github.com/dark1zinn/libunix",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/dark1zinn/libunix.git"
-  },
-  "bugs": {
-    "url": "https://github.com/dark1zinn/libunix/issues"
-  },
-  "module": "src/index.ts",
-  "type": "module",
-  "dependencies": {},
-  "scripts": {},
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  }
+    "name": "libunix",
+    "author": "dark1zinn",
+    "license": "MIT",
+    "version": "0.1.0",
+    "description": "A abstraction-layer library for managing Unix Domain Sockets (UDS).",
+    "keywords": [
+        "unix",
+        "domain",
+        "socket",
+        "uds",
+        "network",
+        "communication"
+    ],
+    "homepage": "https://github.com/dark1zinn/libunix",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/dark1zinn/libunix.git"
+    },
+    "bugs": {
+        "url": "https://github.com/dark1zinn/libunix/issues"
+    },
+    "module": "src/index.ts",
+    "type": "module",
+    "dependencies": {},
+    "scripts": {
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "devDependencies": {
+        "@types/bun": "latest",
+        "prettier": "^3"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    }
 }
