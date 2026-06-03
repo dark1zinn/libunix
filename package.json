@@ -2,7 +2,7 @@
   "name": "libunix",
   "author": "dark1zinn",
   "license": "MIT",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "A abstraction-layer library for managing Unix Domain Sockets (UDS).",
   "keywords": [
     "unix",
