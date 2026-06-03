@@ -22,6 +22,8 @@
   },
   "module": "src/index.ts",
   "type": "module",
+  "dependencies": {},
+  "scripts": {},
   "devDependencies": {
     "@types/bun": "latest"
   },
