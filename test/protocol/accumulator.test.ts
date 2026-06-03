@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { MessageType } from "../../src/protocol/constants.ts";
+import {
+  MessageType,
+  type MessageType as MessageTypeValue,
+} from "../../src/protocol/constants.ts";
 import { StreamAccumulator } from "../../src/protocol/accumulator.ts";
 import { encodeEmit } from "../../src/protocol/envelope.ts";
 import {
@@ -16,7 +19,11 @@ function correlation(byte: number): Uint8Array {
   return id;
 }
 
-function buildFrame(type: number, corr: Uint8Array, payload: Uint8Array): Uint8Array {
+function buildFrame(
+  type: MessageTypeValue,
+  corr: Uint8Array,
+  payload: Uint8Array,
+): Uint8Array {
   return encodeFrame(type, corr, payload);
 }
 

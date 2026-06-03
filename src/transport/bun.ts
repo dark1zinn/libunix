@@ -1,4 +1,4 @@
-import type { Socket, SocketListener } from "bun";
+import type { Socket, SocketHandler, SocketListener } from "bun";
 import type {
   ProbeConnectResult,
   TransportAdapter,
@@ -6,10 +6,13 @@ import type {
   TransportSocket,
   TransportSocketHandlers,
 } from "./adapter.ts";
+import { SendQueue } from "./send-queue.ts";
 
 type BunSocketData = {
   handle: BunSocketHandle;
 };
+
+type BunSocket = Socket<BunSocketData>;
 
 function toUint8Array(data: string | ArrayBuffer | Uint8Array): Uint8Array {
   if (typeof data === "string") {
@@ -28,11 +31,11 @@ function normalizeError(error: unknown): Error {
 export class BunSocketHandle implements TransportSocket {
   readonly handleId: string;
 
-  constructor(readonly native: Socket<BunSocketData>) {
+  constructor(readonly native: BunSocket) {
     this.handleId = crypto.randomUUID();
   }
 
-  static fromNative(native: Socket<BunSocketData>): BunSocketHandle {
+  static fromNative(native: BunSocket): BunSocketHandle {
     const existing = native.data?.handle;
     if (existing) {
       return existing;
@@ -45,26 +48,32 @@ export class BunSocketHandle implements TransportSocket {
 
 function createSocketHandlers(
   handlers: TransportSocketHandlers,
-): Socket<BunSocketData>["handler"] {
+): SocketHandler<BunSocketData> {
   return {
-    open(native) {
-      const handle = BunSocketHandle.fromNative(native);
+    open(socket: BunSocket) {
+      const handle = BunSocketHandle.fromNative(socket);
       handlers.onOpen?.(handle);
     },
-    data(native, data) {
-      const handle = BunSocketHandle.fromNative(native);
+    data(socket: BunSocket, data: string | ArrayBuffer | Uint8Array) {
+      const handle = BunSocketHandle.fromNative(socket);
       handlers.onData(handle, toUint8Array(data));
     },
-    close(native, error) {
-      const handle = BunSocketHandle.fromNative(native);
+    close(socket: BunSocket, error?: Error) {
+      const handle = BunSocketHandle.fromNative(socket);
       handlers.onClose?.(handle, error ? normalizeError(error) : undefined);
     },
-    error(native, error) {
-      const handle = BunSocketHandle.fromNative(native);
+    error(socket: BunSocket, error: Error) {
+      const handle = BunSocketHandle.fromNative(socket);
       handlers.onError?.(handle, normalizeError(error));
     },
   };
 }
+
+const probeSocketHandlers: SocketHandler<BunSocketData> = {
+  open() {},
+  data() {},
+  error() {},
+};
 
 function isProbeRefused(error: unknown): boolean {
   if (error && typeof error === "object" && "code" in error) {
@@ -78,6 +87,10 @@ function isProbeRefused(error: unknown): boolean {
 }
 
 export class BunTransportAdapter implements TransportAdapter {
+  private readonly outbound = new SendQueue((socket, data) => {
+    this.writeImmediate(socket, data);
+  });
+
   listen(
     path: string,
     handlers: TransportSocketHandlers,
@@ -98,7 +111,7 @@ export class BunTransportAdapter implements TransportAdapter {
     path: string,
     handlers: TransportSocketHandlers,
   ): Promise<TransportSocket> {
-    const native = await Bun.connect({
+    const native = await Bun.connect<BunSocketData>({
       unix: path,
       socket: createSocketHandlers(handlers),
     });
@@ -109,16 +122,12 @@ export class BunTransportAdapter implements TransportAdapter {
     path: string,
     timeoutMs = 200,
   ): Promise<ProbeConnectResult> {
-    let native: Socket | undefined;
+    let native: BunSocket | undefined;
     try {
       native = await Promise.race([
-        Bun.connect({
+        Bun.connect<BunSocketData>({
           unix: path,
-          socket: {
-            data() {},
-            open() {},
-            error() {},
-          },
+          socket: probeSocketHandlers,
         }),
         new Promise<never>((_, reject) => {
           setTimeout(
@@ -139,13 +148,18 @@ export class BunTransportAdapter implements TransportAdapter {
   }
 
   write(socket: TransportSocket, data: Uint8Array): void {
-    const handle = socket as BunSocketHandle;
-    handle.native.write(data);
+    this.outbound.enqueue(socket, data);
   }
 
   async close(socket: TransportSocket): Promise<void> {
+    this.outbound.clear(socket);
     const handle = socket as BunSocketHandle;
     handle.native.end();
+  }
+
+  private writeImmediate(socket: TransportSocket, data: Uint8Array): void {
+    const handle = socket as BunSocketHandle;
+    handle.native.write(data);
   }
 }
 
