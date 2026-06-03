@@ -2,11 +2,11 @@
 
 **Package Name:** `libunix`
 
-**Target Runtimes:** Bun (Primary, optimized), Node.js/Deno (Agnostic via Adapter Pattern)
+**Target Runtimes:** Bun (primary, v1 implementation). Node.js/Deno via `TransportAdapter` are **deferred** (see §8 Non-Goals).
 
 **Language:** TypeScript
 
-**Design Philosophy:** Elite Developer Experience (DX), Strict Protocol Stability, Resource Hygiene, Zero External Dependencies.
+**Design Philosophy:** Elite Developer Experience (DX), Strict Protocol Stability, Resource Hygiene, **Zero Runtime npm Dependencies**.
 
 ---
 
@@ -20,6 +20,20 @@
 2. **Deterministic Messaging:** Every transmission must be explicitly framed using a predictable length-prefixed protocol.
 3. **Impeccable System Hygiene:** Automate file unlinking, handle dead sockets gracefully, and ensure zero lingering resources on process exit.
 4. **Clean API Surface:** Provide absolute simplicity via exported `Server` and `Client` primitives.
+
+### 1.1 Zero Runtime Dependencies
+
+* **`package.json` must not list `dependencies`.** Only runtime builtins and Node/Bun **core modules** (`node:fs`, `node:os`, `node:path`, `JSON`, `crypto`).
+* **Allowed dev tooling:** `@types/bun` (devDependency), `bun test` for validation.
+* **Optional for consumers:** `typescript` as `peerDependencies` (typing event maps only).
+* **Do not add:** `uuid`, `zod`, `msgpack`, `vitest`/`jest`, or IPC wrapper packages unless a future requirement explicitly overrides this policy.
+* **Forward/backward compatibility** is achieved via stable wire frames, envelope `v`, and optional JSON fields—not via npm packages.
+
+### 1.2 v1 Scope (KISS)
+
+* **Filesystem-bound UDS paths only** (§4.1). Linux abstract namespace sockets are deferred.
+* **Bun adapter only** at runtime; `adapter: 'node'` in config may exist for forward-compat but must throw until a Node adapter ships.
+* **Client → server** `request()` / `emit()` only; **no** `RemotePeer.request()` (server-initiated RPC) in v1.
 
 ---
 
@@ -50,16 +64,86 @@ Every frame transmitted across the socket must conform to the following byte all
 * `0x04` (`RESPONSE_ERROR`): A failure reply matching an open `REQUEST`.
 
 
-3. **Correlation ID (Bytes 5-20):** A 16-byte fixed-width slot. For `EVENT_EMIT`, this must be filled with zeros. For `REQUEST`, this contains a unique alphanumeric identifier (e.g., fractional timestamp + incremental tracker padding to 16 bytes). A `RESPONSE` must echo back the exact correlation ID of its initiating `REQUEST`.
-4. **Payload (Bytes 21+):** The raw serialized message block. By default, this is a UTF-8 string containing stringified JSON, but the framing parser must remain agnostic to allow raw binary injection.
+3. **Correlation ID (bytes 5–20 of the length-delimited body):** A **16-byte opaque binary slot** (not a variable-length string). For `EVENT_EMIT`, all 16 bytes must be `0x00`. For `REQUEST` / `RESPONSE_*`, the client generates 16 unique bytes per in-flight request; responses must echo the initiating request’s bytes exactly. v1 generator: 8-byte big-endian `uint64` (timestamp ms) + 8-byte big-endian `uint64` (monotonic counter). Do not use UTF-8 UUID text unless it is exactly 16 bytes when encoded.
+4. **Payload (bytes 21+ of the full on-wire frame):** The variable tail of the length-delimited body: UTF-8 JSON application envelope (§2.4) in v1. The framing layer treats payload as opaque bytes; only the envelope decoder interprets JSON.
+
+**Frame size limits (v1):**
+
+* `MAX_FRAME_SIZE = 1_048_576` (1 MiB): maximum total on-wire frame size `4 + L`.
+* `MIN_BODY_LENGTH = 17`: minimum `L` (= 1 byte type + 16 byte correlation + 0 byte payload). Emit/request envelopes require non-empty JSON payload (practical minimum `L ≥ 19`).
+* If `L > MAX_FRAME_SIZE - 4` or `L < MIN_BODY_LENGTH`, drop the connection.
 
 ### 2.3 Stream Fragmentation Processing Engine
 
-The internal network buffer layer must manage an accumulative chunk pipeline.
+The internal network buffer layer must manage an accumulative chunk pipeline. Length `L` is the size of everything **after** the 4-byte length prefix (type + correlation + payload).
 
-* **State 1: Reading Header:** Accumulate incoming bytes until the total buffer size is $\ge 21$ bytes. Parse the length header ($L$).
-* **State 2: Reading Payload:** Accumulate incoming bytes until the total buffer size contains at least $4 + L$ bytes.
-* **State 3: Frame Dispatch:** Slice exactly $4 + L$ bytes out of the pipeline buffer, pass it down to the framing deserializer, and retain any trailing bytes for the next framing loop cycle.
+1. **Read length:** Accumulate until `buffer.length ≥ 4`. Parse `L` as big-endian `Uint32`. If invalid per §2.2 limits, drop connection.
+2. **Read body:** Accumulate until `buffer.length ≥ 4 + L`.
+3. **Dispatch:** Slice exactly `4 + L` bytes as one frame. Pass bytes `[4, 4+L)` to the frame deserializer (type at offset 4, correlation at 5–20, payload at 21+). Retain any trailing bytes for the next loop.
+4. **Repeat** from step 1 on the remainder.
+
+Partial reads (e.g. 2 bytes of `L` then the rest) must be handled; never assume a single `read` delivers a full frame.
+
+### 2.4 Application Envelope (JSON)
+
+Payload bytes are **UTF-8 JSON**. The wire frame supplies message type and correlation; the envelope supplies **event name** and **data** for the public API (`emit`, `request`, handlers).
+
+#### Envelope shapes
+
+| Wire type | API | JSON payload (UTF-8) |
+|-----------|-----|----------------------|
+| `0x01` `EVENT_EMIT` | `emit(event, data)` | `{"v":1,"e":"<event>","d":<data>}` |
+| `0x02` `REQUEST` | `request(event, data)` | `{"v":1,"e":"<event>","d":<data>}` |
+| `0x03` `RESPONSE_SUCCESS` | handler return value | `{"v":1,"d":<result>}` — no `e` |
+| `0x04` `RESPONSE_ERROR` | handler throw / missing handler | `{"v":1,"err":{...}}` — no `e` |
+
+**Fields:**
+
+* `v` (number, required): Envelope version. **Only `1` is supported in v1.** Unknown `v` on an inbound `REQUEST` should yield `RESPONSE_ERROR` with `code: "UNSUPPORTED_ENVELOPE_VERSION"`.
+* `e` (string, required on emit/request): Event channel name (e.g. `"system:ping"`). Must match a registered handler key.
+* `d` (any JSON value or `null`): Event argument. Use `"d":null` when there is no argument (e.g. `request("system:ping")`).
+* `err` (object, required on `RESPONSE_ERROR` only):
+
+```typescript
+interface EnvelopeError {
+  code: string;      // UPPER_SNAKE, e.g. "NO_HANDLER", "HANDLER_THROW", "TIMEOUT"
+  message: string;   // human-readable; no stack traces on the wire in v1
+  details?: unknown; // optional forward-compat
+}
+```
+
+#### Routing rules
+
+**Server (inbound from client):**
+
+* `EVENT_EMIT`: decode envelope → dispatch `peer.on(e)` if registered; if no handler, **silent drop** (no wire reply in v1).
+* `REQUEST`: decode envelope → dispatch `peer.onRequest(e)`; on success reply with `RESPONSE_SUCCESS`, same correlation, `{"v":1,"d":<result>}`; on thrown error reply with `RESPONSE_ERROR`, `code: "HANDLER_THROW"`; if no handler, `RESPONSE_ERROR`, `code: "NO_HANDLER"`.
+
+**Client (inbound from server):**
+
+* `EVENT_EMIT`: decode → dispatch `client.on(e)` if registered.
+* `RESPONSE_SUCCESS` / `RESPONSE_ERROR`: match **correlation bytes** to internal pending map; resolve or reject the `request()` promise. `RESPONSE_ERROR` → reject with library error using `err.code` / `err.message`.
+
+**Defaults (v1):**
+
+* `request(..., timeoutMs?)` default timeout: **30_000** ms.
+* Serialization: `JSON.stringify` / `JSON.parse` only (zero npm dependencies).
+
+#### Example
+
+Client `request("system:ping", null)`:
+
+* Outbound frame: type `0x02`, 16-byte correlation, payload `{"v":1,"e":"system:ping","d":null}`.
+* Server handler returns `{ status: "pong", timestamp: 1730000000000 }`.
+* Inbound frame: type `0x03`, **same** correlation, payload `{"v":1,"d":{"status":"pong","timestamp":1730000000000}}`.
+
+#### Forward compatibility
+
+* v1 decoders ignore unknown optional JSON keys (e.g. future `"meta":{}`).
+* Future envelope `v: 2` may change JSON shape; the binary frame layout stays stable.
+* Raw/binary payload mode is out of scope for v1.
+
+Implementation: `src/protocol/envelope.ts` (`encodeEmit`, `encodeRequest`, `encodeSuccess`, `encodeError`, `decodeEnvelope`).
 
 ---
 
@@ -69,8 +153,8 @@ The internal network buffer layer must manage an accumulative chunk pipeline.
 
 ```typescript
 export interface ConnectionOptions {
-  id: string;             // Absolute file path or a generic token resolving to /tmp/{id}.sock
-  adapter?: 'bun' | 'node'; // Extensible platform target
+  id: string;             // Logical name or filesystem path (see §4.1 path resolution)
+  adapter?: 'bun' | 'node'; // v1: only 'bun' (default); 'node' throws until implemented
 }
 
 export interface ServerOptions extends ConnectionOptions {
@@ -164,7 +248,15 @@ export class Client<OutgoingEvents extends Record<string, any> = any> {
 
 ### 4.1 Filesystem Hygiene & Self-Healing Startup
 
-When `Server.create()` is executed, the internal runtime coordinator MUST process the target socket path through the following deterministic synchronization lifecycle:
+**v1 addressing:** Filesystem paths only. No abstract namespace (`\0` prefix) in v1.
+
+**Path resolution (`resolveSocketPath(id)`):**
+
+1. If `id` contains `/` or ends with `.sock` → `path.resolve(id)` (absolute or relative filesystem path). Parent directory must already exist (no auto-mkdir in v1).
+2. Else → `path.join(os.tmpdir(), `${sanitize(id)}.sock`)` using `node:os` `tmpdir()` (honors `TMPDIR`).
+3. Reject unsafe or overlong `id` / paths at `Server.create()` / `Client.connect()`.
+
+When `Server.create()` is executed, the internal runtime coordinator MUST process the resolved socket path through the following deterministic synchronization lifecycle:
 
 1. **Detection:** Check if a file already exists at the requested path.
 2. **Liveness Verification:** If the file exists, attempt a dry, low-timeout connection loop (`Bun.connect` or platform equivalent) to the socket.
@@ -176,13 +268,14 @@ When `Server.create()` is executed, the internal runtime coordinator MUST proces
 
 ### 4.2 Graceful Process Teardown
 
-To minimize orphaned operating system handles, both the Server and Client modules must capture active termination vectors. Register internal event bindings onto:
+To minimize orphaned operating system handles, use a **single ref-counted lifecycle registry** (`src/utils/lifecycle.ts`) shared by all `Server` / `Client` instances:
 
-* `process.on('SIGINT')`
-* `process.on('SIGTERM')`
-* `process.on('exit')`
-
-Upon receipt of any of these lifecycle hooks, the server instance MUST execute its standard cleanup routing, unlinking the `.sock` path completely from the platform file tree before final context termination.
+* Register **one** set of `process` listeners (`SIGINT`, `SIGTERM`) on first instance; increment ref count per instance, decrement on `close()` / `disconnect()`.
+* On signal: run async `close()` / `disconnect()` for all registered instances (best-effort `Promise.all`).
+* Remove listeners when ref count reaches zero.
+* **`process.on('exit')`:** only synchronous cleanup (e.g. `unlinkSync`); do not rely on `await` during `exit`.
+* **`[Symbol.dispose]()`:** sync best-effort teardown (fire-and-forget); prefer `await close()` for full hygiene.
+* Document: `SIGKILL` and hard crashes may leave orphan socket files; §4.1 probe-on-start mitigates on next boot.
 
 ### 4.3 Platform Agnostic Isolation: The Adapter Interface
 
@@ -197,6 +290,26 @@ export interface TransportAdapter {
 }
 
 ```
+
+### 4.4 Per-Connection Send Queue
+
+Concurrent `write()` calls on one stream interleave bytes and corrupt frames. Every connected socket must use a **serialized send queue** (`src/transport/send-queue.ts`):
+
+* `enqueue(socket, Uint8Array)` appends to a per-socket FIFO.
+* A single in-flight write drains the queue; when complete, start the next chunk.
+* All `emit` / `request` / response encoding paths go through the queue, never raw adapter `write` from multiple call sites without serialization.
+* v1 backpressure: if write fails with `EAGAIN`, retry or queue (full pause/resume is a patch backlog item).
+
+### 4.5 Client Pending Request Registry
+
+`Client.request()` (`src/client/pending.ts`) maintains `Map<string, PendingEntry>` keyed by **hex-encoded 16-byte correlation id** (or equivalent stable string key):
+
+* On `request`: generate correlation (§2.2), store `{ resolve, reject, timer }`, send `REQUEST` frame.
+* On `RESPONSE_SUCCESS`: decode `d`, `resolve`, delete entry, clear timer.
+* On `RESPONSE_ERROR`: `reject(LibunixError)`, delete entry, clear timer.
+* On **timeout** (default 30_000 ms): `reject` with `code: "TIMEOUT"`, delete entry; ignore late responses for that id.
+* On **disconnect** or **reconnect start**: reject all pending with a single connection-lost error; clear map.
+* Multiple concurrent `request()` calls are supported (unique correlation per call).
 
 ---
 
@@ -260,10 +373,74 @@ AI agents executing this build should tackle development sequentially across the
 ### Phase 4: Public Client Core Construction
 
 * Create the `Client` class.
-* Implement the `request` method: generate a 16-character correlation ID, append a deferred promise object to an internal tracking map, and emit the packet. When a packet containing type `0x03` or `0x04` arrives with that same identifier, look it up in the tracking map and resolve/reject the parent promise immediately.
+* Implement the `request` method: generate a **16-byte binary** correlation ID (§2.2), append a deferred promise to an internal tracking map, and emit a `REQUEST` frame with the §2.4 envelope. When type `0x03` or `0x04` arrives with the same correlation bytes, resolve/reject the promise and remove the map entry.
 * Code the exponential backoff reconnection routine to retry connections if the socket disappears unexpectedly.
 
 ### Phase 5: Validation Suite & Stress Simulation
 
 * Build out a test layout involving massive asynchronous JSON loops to verify that correlation IDs are cleanly routed without data overlap.
 * Rig up a stress injector that manually splits frame payloads into tiny 2-byte network chunks to guarantee the structural stream accumulator handles high-fragmentation edge cases without breaking.
+
+---
+
+## 6. Source Module Layout
+
+One concern per file. Public API exported only from `src/index.ts` (and types from `src/types.ts`). **Import direction:** `protocol` must not import `server` / `client`; `transport` imports `protocol` only; `server` / `client` import `protocol`, `transport`, `utils`.
+
+```
+src/
+  index.ts                 # public exports only
+  types.ts                 # ConnectionOptions, handlers, shared public types
+  protocol/
+    constants.ts           # MessageType, MAX_FRAME_SIZE, MIN_BODY_LENGTH
+    frame.ts               # encodeFrame / decodeFrame
+    accumulator.ts         # StreamAccumulator.append()
+    envelope.ts            # §2.4 JSON envelope encode/decode
+  transport/
+    adapter.ts             # TransportAdapter interface
+    bun.ts                 # BunTransportAdapter
+    send-queue.ts          # §4.4 serialized writes
+  server/
+    server.ts              # Server.create, close
+    peer.ts                # RemotePeer handlers + emit
+    socket-hygiene.ts      # §4.1 resolve path, probe, unlink, chmod
+  client/
+    client.ts              # connect, emit, request, disconnect, on
+    pending.ts             # §4.5 correlation map + timeouts
+    reconnect.ts           # fixed | exponential backoff
+  utils/
+    path.ts                # resolveSocketPath
+    correlation.ts         # nextCorrelationId() -> 16 bytes
+    lifecycle.ts           # §4.2 ref-counted signal registry
+    errors.ts              # LibunixError
+
+test/                      # mirrors protocol/, server/, client/ (Phase 5)
+```
+
+---
+
+## 7. Non-Goals (v1 and Deferred)
+
+| Item | Status |
+|------|--------|
+| Linux abstract namespace UDS | Deferred (opt-in future `namespace: 'abstract'`) |
+| `NodeTransportAdapter` / Deno | Deferred; v1 Bun only |
+| `RemotePeer.request()` (server → client RPC) | Out of v1 |
+| Broadcast / multi-peer fan-out helper | Out of v1 |
+| npm runtime dependencies | Forbidden in v1 (§1.1) |
+| Wire protocol version byte | Deferred (patch backlog) |
+| MessagePack / binary envelope mode | Deferred |
+
+Hardening items (duplicate response, jitter on reconnect, lockfile for `/tmp` races, etc.) live in the execution plan **patch** backlog—not v1 blockers.
+
+---
+
+## 8. Implementation Agent Workflow
+
+Agents implementing this package must follow **one todo per session**:
+
+1. Complete the next pending item in order: spec (`plan-01` ✓, `plan-02` ✓) → `impl-01` … `impl-10`.
+2. Do not start the following todo in the same session unless the user explicitly asks to continue.
+3. After each todo: summarize changes, how to review, then **stop** for user approval (`proceed`).
+
+Patch todos are **low urgency** until v1 core is shipped and the user reprioritizes.
