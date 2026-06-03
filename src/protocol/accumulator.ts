@@ -26,14 +26,14 @@ function peekBodyLength(buffer: Uint8Array): number {
  * Throws {@link FrameError} on invalid length prefix; caller should drop the connection.
  */
 export class StreamAccumulator {
-  #buffer = new Uint8Array(0);
+  private buffer: Uint8Array = new Uint8Array(0);
 
-  get bufferedBytes(): number {
-    return this.#buffer.length;
+  bufferedByteCount(): number {
+    return this.buffer.length;
   }
 
   reset(): void {
-    this.#buffer = new Uint8Array(0);
+    this.buffer = new Uint8Array(0);
   }
 
   append(chunk: Uint8Array): DecodedFrame[] {
@@ -41,23 +41,23 @@ export class StreamAccumulator {
       return [];
     }
 
-    const merged = new Uint8Array(this.#buffer.length + chunk.length);
-    merged.set(this.#buffer);
-    merged.set(chunk, this.#buffer.length);
-    this.#buffer = merged;
+    const merged = new Uint8Array(this.buffer.length + chunk.length);
+    merged.set(this.buffer);
+    merged.set(chunk, this.buffer.length);
+    this.buffer = merged;
 
     const frames: DecodedFrame[] = [];
 
-    while (this.#buffer.length >= LENGTH_PREFIX_SIZE) {
-      const bodyLength = peekBodyLength(this.#buffer);
+    while (this.buffer.length >= LENGTH_PREFIX_SIZE) {
+      const bodyLength = peekBodyLength(this.buffer);
       const frameSize = LENGTH_PREFIX_SIZE + bodyLength;
-      if (this.#buffer.length < frameSize) {
+      if (this.buffer.length < frameSize) {
         break;
       }
 
-      const frameBytes = this.#buffer.slice(0, frameSize);
+      const frameBytes = this.buffer.slice(0, frameSize);
       frames.push(decodeFrame(frameBytes));
-      this.#buffer = this.#buffer.slice(frameSize);
+      this.buffer = this.buffer.slice(frameSize);
     }
 
     return frames;

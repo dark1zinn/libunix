@@ -36,7 +36,7 @@ describe("StreamAccumulator", () => {
     const frames = acc.append(frame);
     expect(frames).toHaveLength(1);
     expect(frames[0]!.type).toBe(MessageType.EventEmit);
-    expect(acc.bufferedBytes).toBe(0);
+    expect(acc.bufferedByteCount()).toBe(0);
   });
 
   test("reassembles frame split into 2-byte chunks", () => {
@@ -49,7 +49,7 @@ describe("StreamAccumulator", () => {
     }
     expect(all).toHaveLength(1);
     expect(all[0]!.type).toBe(MessageType.EventEmit);
-    expect(acc.bufferedBytes).toBe(0);
+    expect(acc.bufferedByteCount()).toBe(0);
   });
 
   test("decodes two concatenated frames in one append", () => {
@@ -86,10 +86,10 @@ describe("StreamAccumulator", () => {
     );
     const acc = new StreamAccumulator();
     expect(acc.append(frame.subarray(0, 2))).toHaveLength(0);
-    expect(acc.bufferedBytes).toBe(2);
+    expect(acc.bufferedByteCount()).toBe(2);
     const frames = acc.append(frame.subarray(2));
     expect(frames).toHaveLength(1);
-    expect(acc.bufferedBytes).toBe(0);
+    expect(acc.bufferedByteCount()).toBe(0);
   });
 
   test("returns multiple frames across sequential appends", () => {
@@ -112,9 +112,9 @@ describe("StreamAccumulator", () => {
     const frame = buildFrame(MessageType.EventEmit, zeroCorrelation(), encodeEmit("z", 0));
     const acc = new StreamAccumulator();
     acc.append(frame.subarray(0, 3));
-    expect(acc.bufferedBytes).toBe(3);
+    expect(acc.bufferedByteCount()).toBe(3);
     acc.reset();
-    expect(acc.bufferedBytes).toBe(0);
+    expect(acc.bufferedByteCount()).toBe(0);
     expect(acc.append(frame)).toHaveLength(1);
   });
 });
