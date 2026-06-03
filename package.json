@@ -3,38 +3,53 @@
     "author": "dark1zinn",
     "license": "MIT",
     "version": "0.1.0",
-    "description": "A abstraction-layer library for managing Unix Domain Sockets (UDS).",
+    "description": "An abstraction-layer library for Unix domain socket (UDS) IPC on Bun.",
     "keywords": [
         "unix",
         "domain",
         "socket",
         "uds",
+        "ipc",
+        "bun",
         "network",
         "communication"
     ],
     "homepage": "https://github.com/dark1zinn/libunix",
     "repository": {
         "type": "git",
-        "url": "https://github.com/dark1zinn/libunix.git"
+        "url": "git+https://github.com/dark1zinn/libunix.git"
     },
     "bugs": {
         "url": "https://github.com/dark1zinn/libunix/issues"
     },
-    "module": "src/index.ts",
     "type": "module",
+    "sideEffects": false,
+    "engines": {
+        "bun": ">=1.1.0"
+    },
+    "os": ["linux", "darwin"],
+    "files": ["dist", "README.md", "LICENSE"],
+    "main": "./dist/index.mjs",
+    "types": "./dist/index.d.mts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.mts",
+            "import": "./dist/index.mjs",
+            "default": "./dist/index.mjs"
+        }
+    },
     "dependencies": {},
     "scripts": {
+        "build": "tsdown",
+        "test": "bun test",
         "format": "prettier --write .",
-        "format:check": "prettier --check ."
-    },
-    "exports": {
-        ".": "./src/index.ts"
+        "format:check": "prettier --check .",
+        "prepublishOnly": "bun run format:check && bun test && bun run build"
     },
     "devDependencies": {
         "@types/bun": "latest",
-        "prettier": "^3"
-    },
-    "peerDependencies": {
-        "typescript": "^5"
+        "prettier": "^3",
+        "tsdown": "^0.22.1",
+        "typescript": "^6.0.3"
     }
 }

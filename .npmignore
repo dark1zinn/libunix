@@ -1,0 +1,17 @@
+# Source and dev-only artifacts (package.json "files" is the primary allowlist)
+src/
+test/
+docs/
+PLAN.md
+tsdown.config.ts
+tsconfig.json
+.prettierrc.json
+.prettierignore
+flake.nix
+flake.lock
+.envrc
+.direnv
+.gitignore
+*.tgz
+coverage
+node_modules
