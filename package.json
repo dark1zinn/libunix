@@ -27,8 +27,15 @@
     "engines": {
         "bun": ">=1.1.0"
     },
-    "os": ["linux", "darwin"],
-    "files": ["dist", "README.md", "LICENSE"],
+    "os": [
+        "linux",
+        "darwin"
+    ],
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
     "main": "./dist/index.mjs",
     "types": "./dist/index.d.mts",
     "exports": {
