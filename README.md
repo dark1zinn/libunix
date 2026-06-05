@@ -94,6 +94,8 @@ bun test
 bun run build   # tsdown → dist/
 ```
 
+Benchmarks (hyperfine, requires Nix dev shell): `bun run bench`. Tracked baselines live in [docs/benchmarks/](docs/benchmarks/).
+
 Publish tarball is built with [tsdown](https://tsdown.dev/guide/getting-started); `prepublishOnly` runs format check, tests, and build.
 
 ## License

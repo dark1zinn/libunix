@@ -49,6 +49,10 @@
     "scripts": {
         "build": "tsdown",
         "test": "bun test",
+        "bench": "bash test/bench/run-all.sh",
+        "bench:protocol": "bash test/bench/run-protocol.sh",
+        "bench:ipc": "bash test/bench/run-ipc.sh",
+        "bench:e2e": "bash test/bench/run-e2e.sh",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "prepublishOnly": "bun run format:check && bun test && bun run build"
