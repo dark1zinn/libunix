@@ -5,3 +5,9 @@ coverage
 bun.lock
 flake.lock
 .direnv
+
+# hyperfine-generated benchmark tables
+docs/benchmarks/protocol.md
+docs/benchmarks/ipc.md
+docs/benchmarks/e2e.md
+docs/benchmarks/summary.md
