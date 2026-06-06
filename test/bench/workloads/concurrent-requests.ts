@@ -1,5 +1,13 @@
 import { Client, Server } from '../../../src/index.ts';
-import { cleanupSocket, parseConcurrency, parseIterations, tempSocketPath } from '../_shared.ts';
+import {
+    cleanupSocket,
+    parseBenchAdapter,
+    parseConcurrency,
+    parseIterations,
+    tempSocketPath,
+} from '../_shared.ts';
+
+const adapter = parseBenchAdapter();
 
 type TaskEvents = {
     task: { id: number };
@@ -11,14 +19,14 @@ const concurrency = parseConcurrency(32);
 const socketPath = tempSocketPath('libunix-bench-concurrent');
 
 try {
-    const server = await Server.create<TaskEvents>({ id: socketPath, adapter: 'bun' });
+    const server = await Server.create<TaskEvents>({ id: socketPath, adapter });
     const ready = Promise.withResolvers<void>();
     server.on('connection', (peer) => {
         peer.onRequest('task', (data: { id: number }) => ({ id: data.id, ok: true }));
         ready.resolve();
     });
 
-    const client = await Client.connect<TaskEvents>({ id: socketPath, adapter: 'bun' });
+    const client = await Client.connect<TaskEvents>({ id: socketPath, adapter });
     await ready.promise;
 
     let completed = 0;
