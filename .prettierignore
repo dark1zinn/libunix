@@ -11,3 +11,5 @@ docs/benchmarks/protocol.md
 docs/benchmarks/ipc.md
 docs/benchmarks/e2e.md
 docs/benchmarks/summary.md
+docs/benchmarks/ipc-node.md
+docs/benchmarks/e2e-node.md

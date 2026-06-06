@@ -1,5 +1,6 @@
 export interface ConnectionOptions {
     id: string;
+    /** Transport backend. Omitted: Bun runtime if available, else `node:net` (Node.js 20+). */
     adapter?: 'bun' | 'node';
 }
 

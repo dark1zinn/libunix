@@ -3,7 +3,7 @@
     "author": "dark1zinn",
     "license": "MIT",
     "version": "0.1.0",
-    "description": "An abstraction-layer library for Unix domain socket (UDS) IPC on Bun.",
+    "description": "An abstraction-layer library for Unix domain socket (UDS) IPC on Bun and Node.js.",
     "keywords": [
         "unix",
         "domain",
@@ -49,10 +49,13 @@
     "scripts": {
         "build": "tsdown",
         "test": "bun test",
+        "test:node": "bun run build && node --test test/node/smoke.mjs",
         "bench": "bash test/bench/run-all.sh",
         "bench:protocol": "bash test/bench/run-protocol.sh",
         "bench:ipc": "bash test/bench/run-ipc.sh",
+        "bench:ipc:node": "bash test/bench/run-ipc-node.sh",
         "bench:e2e": "bash test/bench/run-e2e.sh",
+        "bench:e2e:node": "bash test/bench/run-e2e-node.sh",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "prepublishOnly": "bun run format:check && bun test && bun run build"

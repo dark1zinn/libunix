@@ -17,8 +17,12 @@ hyperfine --version
 bun run bench
 bun run bench:protocol
 bun run bench:ipc
+bun run bench:ipc:node
 bun run bench:e2e
+bun run bench:e2e:node
 ```
+
+Set `BENCH_ADAPTER=node` when running IPC/E2E workloads directly for the Node transport path.
 
 Or invoke scripts directly:
 

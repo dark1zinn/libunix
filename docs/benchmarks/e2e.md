@@ -1,4 +1,5 @@
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `bun test/bench/workloads/full-stack-e2e.ts 100` | 118.5 ± 42.0 | 71.8 | 260.9 | 1.13 ± 0.43 |
-| `bun test/bench/workloads/full-stack-e2e.ts 500` | 105.0 ± 13.5 | 89.2 | 140.2 | 1.00 |
+| `bun /home/dark1zin/repos/1-Projects/libunix/test/bench/workloads/full-stack-e2e.ts 100` | 51.6 ± 3.1 | 44.8 | 63.4 | 1.00 |
+| `bun /home/dark1zin/repos/1-Projects/libunix/test/bench/workloads/full-stack-e2e.ts 500` | 83.4 ± 9.4 | 73.9 | 113.4 | 1.62 ± 0.21 |
+| `bun /home/dark1zin/repos/1-Projects/libunix/test/bench/workloads/full-stack-e2e.ts 1000` | 102.3 ± 4.3 | 96.3 | 113.2 | 1.98 ± 0.15 |
