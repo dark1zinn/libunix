@@ -2,7 +2,7 @@
 
 **Package Name:** `libunix`
 
-**Target Runtimes:** Bun (primary, v1 implementation). Node.js/Deno via `TransportAdapter` are **deferred** (see §8 Non-Goals).
+**Target Runtimes:** Bun (primary). Node.js 20+ via `NodeTransportAdapter` (`node:net`, opt-in or auto-detected). Deno deferred (see §8 Non-Goals).
 
 **Language:** TypeScript
 
@@ -32,7 +32,7 @@
 ### 1.2 v1 Scope (KISS)
 
 - **Filesystem-bound UDS paths only** (§4.1). Linux abstract namespace sockets are deferred.
-- **Bun adapter only** at runtime; `adapter: 'node'` in config may exist for forward-compat but must throw until a Node adapter ships.
+- **Bun adapter** (default on Bun) and **Node adapter** (`adapter: 'node'` or auto-detect when Bun is absent) via `createTransportAdapter`.
 - **Client → server** `request()` / `emit()` only; **no** `RemotePeer.request()` (server-initiated RPC) in v1.
 
 ---
@@ -409,6 +409,7 @@ src/
   transport/
     adapter.ts             # TransportAdapter interface
     bun.ts                 # BunTransportAdapter
+    node.ts                # NodeTransportAdapter (node:net)
     send-queue.ts          # §4.4 serialized writes
   server/
     server.ts              # Server.create, close
@@ -434,7 +435,8 @@ test/                      # mirrors protocol/, server/, client/ (Phase 5)
 | Item                                         | Status                                           |
 | -------------------------------------------- | ------------------------------------------------ |
 | Linux abstract namespace UDS                 | Deferred (opt-in future `namespace: 'abstract'`) |
-| `NodeTransportAdapter` / Deno                | Deferred; v1 Bun only                            |
+| `NodeTransportAdapter`                       | Shipped (`src/transport/node.ts`)                |
+| Deno `TransportAdapter`                      | Deferred                                         |
 | `RemotePeer.request()` (server → client RPC) | Out of v1                                        |
 | Broadcast / multi-peer fan-out helper        | Out of v1                                        |
 | npm runtime dependencies                     | Forbidden in v1 (§1.1)                           |

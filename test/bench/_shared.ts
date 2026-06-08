@@ -36,6 +36,10 @@ export function parseIterations(argvIndex: number, envKey: string, defaultValue:
     return defaultValue;
 }
 
+export function parseBenchAdapter(): 'bun' | 'node' {
+    return process.env.BENCH_ADAPTER === 'node' ? 'node' : 'bun';
+}
+
 export function parseConcurrency(defaultValue = 32): number {
     const raw = process.env.BENCH_CONCURRENCY;
     if (raw === undefined) {

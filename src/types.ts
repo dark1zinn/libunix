@@ -1,5 +1,6 @@
 export interface ConnectionOptions {
     id: string;
+    /** Transport backend. Omitted: Bun runtime if available, else `node:net` (Node.js 20+). */
     adapter?: 'bun' | 'node';
     /** When true, reject oversized or deeply nested envelope JSON before dispatch. */
     strictEnvelope?: boolean;

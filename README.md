@@ -1,11 +1,13 @@
 # libunix
 
-Unix domain socket (UDS) IPC for [Bun](https://bun.com): framed messages, `Server` / `Client`, correlation-based request/response, and lifecycle helpers. **Linux and macOS only**; requires **Bun ≥ 1.1**.
+Unix domain socket (UDS) IPC for [Bun](https://bun.com) and **Node.js 20+**: framed messages, `Server` / `Client`, correlation-based request/response, and lifecycle helpers. **Linux and macOS only**.
 
 ## Install
 
 ```bash
 bun add libunix
+# or
+npm install libunix
 ```
 
 ## Usage
@@ -43,7 +45,22 @@ await server.close();
 - **Logical id** (e.g. `'my-app'`): resolved to `$TMPDIR/my-app.sock` (letters, digits, `.`, `_`, `-` only).
 - **Filesystem path**: pass a path containing `/` or ending in `.sock` (e.g. `/run/myapp.sock`).
 
-`adapter: 'bun'` is the default; omit it if you only target Bun.
+On **Bun**, omit `adapter` (defaults to `Bun.listen` / `Bun.connect`). On **Node**, omit `adapter` (auto-detects `node:net`) or pass `adapter: 'node'` explicitly.
+
+### Node.js 20+
+
+Same API; use the `node:net` transport (no extra dependencies):
+
+```ts
+import { Client, Server } from 'libunix';
+
+const server = await Server.create({ id: 'my-app', adapter: 'node' });
+// ... same handler wiring as above
+
+const client = await Client.connect({ id: 'my-app', adapter: 'node' });
+```
+
+Verify on Node after build: `bun run test:node`.
 
 ### One-way events (emit)
 

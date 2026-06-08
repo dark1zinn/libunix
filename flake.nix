@@ -30,6 +30,7 @@
             packages = with pkgs; [
               bun
               hyperfine
+              nodejs_22
               self.formatter.${system}
             ];
           };
