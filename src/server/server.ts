@@ -7,6 +7,7 @@ import { registerLifecycle, unregisterLifecycle } from '../utils/lifecycle.ts';
 import { prepareSocketPath } from './socket-hygiene.ts';
 import { createTransportAdapter } from './transport-factory.ts';
 import { RemotePeer } from './peer.ts';
+import { decodeEnvelopeOptionsFromConnection } from '../protocol/envelope.ts';
 
 type ConnectionHandler<T extends Record<string, unknown>> = (peer: RemotePeer<T>) => void;
 
@@ -100,8 +101,11 @@ export class Server<IncomingEvents extends Record<string, unknown> = Record<stri
     private start(): void {
         this.listener = this.transport.listen(this.socketPath, {
             onOpen: (socket) => {
-                const peer = new RemotePeer<IncomingEvents>(socket, this.transport, (error) =>
-                    this.emitError(error),
+                const peer = new RemotePeer<IncomingEvents>(
+                    socket,
+                    this.transport,
+                    (error) => this.emitError(error),
+                    decodeEnvelopeOptionsFromConnection(this.options),
                 );
                 this.peers.set(socket.handleId, peer);
                 for (const handler of this.connectionHandlers) {

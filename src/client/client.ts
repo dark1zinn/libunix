@@ -1,6 +1,11 @@
 import { StreamAccumulator } from '../protocol/accumulator.ts';
 import { MessageType } from '../protocol/constants.ts';
-import { decodeEnvelope, encodeEmit, encodeRequest } from '../protocol/envelope.ts';
+import {
+    decodeEnvelope,
+    decodeEnvelopeOptionsFromConnection,
+    encodeEmit,
+    encodeRequest,
+} from '../protocol/envelope.ts';
 import { encodeFrame, type DecodedFrame, zeroCorrelation } from '../protocol/frame.ts';
 import type { TransportAdapter, TransportSocket } from '../transport/adapter.ts';
 import type { ClientOptions, MessageHandler } from '../types.ts';
@@ -19,6 +24,7 @@ export class Client<OutgoingEvents extends Record<string, unknown> = Record<stri
 
     private socket: TransportSocket | undefined;
     private disconnected = false;
+    private readonly decodeEnvelopeOptions;
     private readonly lifecycleParticipant = {
         close: () => this.disconnect(),
     };
@@ -27,7 +33,9 @@ export class Client<OutgoingEvents extends Record<string, unknown> = Record<stri
         private readonly options: ClientOptions,
         private readonly socketPath: string,
         private readonly transport: TransportAdapter,
-    ) {}
+    ) {
+        this.decodeEnvelopeOptions = decodeEnvelopeOptionsFromConnection(options);
+    }
 
     static async connect<T extends Record<string, unknown> = Record<string, unknown>>(
         options: ClientOptions,
@@ -113,7 +121,7 @@ export class Client<OutgoingEvents extends Record<string, unknown> = Record<stri
     private async dispatch(frame: DecodedFrame): Promise<void> {
         let envelope;
         try {
-            envelope = decodeEnvelope(frame.payload, frame.type);
+            envelope = decodeEnvelope(frame.payload, frame.type, this.decodeEnvelopeOptions);
         } catch (error) {
             void this.handleConnectionLost(
                 error instanceof Error ? error : new Error(String(error)),

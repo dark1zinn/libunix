@@ -2,9 +2,11 @@ import { StreamAccumulator } from '../protocol/accumulator.ts';
 import { MessageType } from '../protocol/constants.ts';
 import {
     decodeEnvelope,
+    decodeEnvelopeOptionsFromConnection,
     encodeEmit,
     encodeError,
     encodeSuccess,
+    type DecodeEnvelopeOptions,
     type EnvelopeErrorBody,
 } from '../protocol/envelope.ts';
 import { encodeFrame, type DecodedFrame, zeroCorrelation } from '../protocol/frame.ts';
@@ -21,6 +23,7 @@ export class RemotePeer<IncomingEvents extends Record<string, unknown>> {
         readonly socket: TransportSocket,
         private readonly transport: TransportAdapter,
         private readonly onProtocolError: (error: Error) => void,
+        private readonly decodeEnvelopeOptions?: DecodeEnvelopeOptions,
     ) {
         this.id = socket.handleId;
     }
@@ -60,7 +63,7 @@ export class RemotePeer<IncomingEvents extends Record<string, unknown>> {
     private async dispatch(frame: DecodedFrame): Promise<void> {
         let envelope;
         try {
-            envelope = decodeEnvelope(frame.payload, frame.type);
+            envelope = decodeEnvelope(frame.payload, frame.type, this.decodeEnvelopeOptions);
         } catch (error) {
             this.onProtocolError(error instanceof Error ? error : new Error(String(error)));
             return;

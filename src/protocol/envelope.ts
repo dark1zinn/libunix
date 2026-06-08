@@ -1,4 +1,10 @@
 import { MessageType, type MessageType as MessageTypeValue } from './constants.ts';
+import {
+    DEFAULT_MAX_ENVELOPE_BYTES,
+    DEFAULT_MAX_ENVELOPE_DEPTH,
+    measureJsonDepth,
+    parseJsonSafe,
+} from '../utils/json.ts';
 
 export const ENVELOPE_VERSION = 1 as const;
 
@@ -23,6 +29,12 @@ export type ParsedError = { kind: 'error'; error: EnvelopeErrorBody };
 
 export type ParsedEnvelope = ParsedEmit | ParsedRequest | ParsedSuccess | ParsedError;
 
+export interface DecodeEnvelopeOptions {
+    strictEnvelope?: boolean;
+    maxEnvelopeBytes?: number;
+    maxEnvelopeDepth?: number;
+}
+
 export class EnvelopeError extends Error {
     constructor(message: string) {
         super(message);
@@ -37,13 +49,33 @@ function toPayloadJson(value: unknown): Uint8Array {
     return textEncoder.encode(JSON.stringify(value));
 }
 
-function parseJsonRecord(bytes: Uint8Array): Record<string, unknown> {
+function parseJsonRecord(
+    bytes: Uint8Array,
+    options?: DecodeEnvelopeOptions,
+): Record<string, unknown> {
+    if (options?.strictEnvelope) {
+        const maxBytes = options.maxEnvelopeBytes ?? DEFAULT_MAX_ENVELOPE_BYTES;
+        if (bytes.length > maxBytes) {
+            throw new EnvelopeError(
+                `Envelope payload exceeds maxEnvelopeBytes (${bytes.length} > ${maxBytes})`,
+            );
+        }
+    }
+
     let parsed: unknown;
     try {
-        parsed = JSON.parse(textDecoder.decode(bytes));
+        parsed = parseJsonSafe(textDecoder.decode(bytes));
     } catch {
         throw new EnvelopeError('Invalid JSON in envelope payload');
     }
+
+    if (options?.strictEnvelope) {
+        const maxDepth = options.maxEnvelopeDepth ?? DEFAULT_MAX_ENVELOPE_DEPTH;
+        if (measureJsonDepth(parsed) > maxDepth) {
+            throw new EnvelopeError(`Envelope JSON exceeds maxEnvelopeDepth (${maxDepth})`);
+        }
+    }
+
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new EnvelopeError('Envelope must be a JSON object');
     }
@@ -124,8 +156,12 @@ export function encodeError(error: EnvelopeErrorBody): Uint8Array {
     return toPayloadJson(envelope);
 }
 
-export function decodeEnvelope(bytes: Uint8Array, frameType: MessageTypeValue): ParsedEnvelope {
-    const obj = parseJsonRecord(bytes);
+export function decodeEnvelope(
+    bytes: Uint8Array,
+    frameType: MessageTypeValue,
+    options?: DecodeEnvelopeOptions,
+): ParsedEnvelope {
+    const obj = parseJsonRecord(bytes, options);
     readVersion(obj);
 
     switch (frameType) {
@@ -155,4 +191,16 @@ export function decodeEnvelope(bytes: Uint8Array, frameType: MessageTypeValue): 
             throw new EnvelopeError(`Unhandled frame type ${_exhaustive}`);
         }
     }
+}
+
+export function decodeEnvelopeOptionsFromConnection(options: {
+    strictEnvelope?: boolean;
+    maxEnvelopeBytes?: number;
+    maxEnvelopeDepth?: number;
+}): DecodeEnvelopeOptions {
+    return {
+        strictEnvelope: options.strictEnvelope,
+        maxEnvelopeBytes: options.maxEnvelopeBytes,
+        maxEnvelopeDepth: options.maxEnvelopeDepth,
+    };
 }
