@@ -97,3 +97,61 @@ describe('validation errors', () => {
         expect(() => decodeEnvelope(bytes, MessageType.Request)).toThrow(EnvelopeError);
     });
 });
+
+describe('safe JSON parsing', () => {
+    test('__proto__ key does not pollute Object.prototype', () => {
+        const marker = '__libunix_proto_test__';
+        expect((Object.prototype as Record<string, unknown>)[marker]).toBeUndefined();
+
+        const bytes = new TextEncoder().encode(
+            `{"v":${ENVELOPE_VERSION},"e":"x","d":null,"__proto__":{"${marker}":true}}`,
+        );
+        decodeEnvelope(bytes, MessageType.EventEmit);
+
+        expect(({} as Record<string, unknown>)[marker]).toBeUndefined();
+        expect((Object.prototype as Record<string, unknown>)[marker]).toBeUndefined();
+    });
+
+    test('nested __proto__ in d is stripped', () => {
+        const marker = '__libunix_nested_proto__';
+        const bytes = new TextEncoder().encode(
+            `{"v":${ENVELOPE_VERSION},"e":"x","d":{"__proto__":{"${marker}":true},"ok":true}}`,
+        );
+        const parsed = decodeEnvelope(bytes, MessageType.EventEmit);
+        expect(parsed.kind).toBe('emit');
+        if (parsed.kind === 'emit') {
+            expect(parsed.data).toEqual({ ok: true });
+        }
+        expect((Object.prototype as Record<string, unknown>)[marker]).toBeUndefined();
+    });
+
+    test('strictEnvelope rejects oversized payload', () => {
+        const bytes = new TextEncoder().encode(
+            `{"v":${ENVELOPE_VERSION},"e":"x","d":"${'a'.repeat(200)}"}`,
+        );
+        expect(() =>
+            decodeEnvelope(bytes, MessageType.Request, {
+                strictEnvelope: true,
+                maxEnvelopeBytes: 64,
+            }),
+        ).toThrow(EnvelopeError);
+        expect(() =>
+            decodeEnvelope(bytes, MessageType.Request, { strictEnvelope: false }),
+        ).not.toThrow();
+    });
+
+    test('strictEnvelope rejects deeply nested payload', () => {
+        let nested: Record<string, unknown> = { leaf: true };
+        for (let i = 0; i < 70; i++) {
+            nested = { level: nested };
+        }
+        const bytes = encodeRequest('deep', nested);
+        expect(() =>
+            decodeEnvelope(bytes, MessageType.Request, {
+                strictEnvelope: true,
+                maxEnvelopeDepth: 8,
+            }),
+        ).toThrow(EnvelopeError);
+        expect(() => decodeEnvelope(bytes, MessageType.Request)).not.toThrow();
+    });
+});

@@ -128,6 +128,14 @@ interface EnvelopeError {
 
 - `request(..., timeoutMs?)` default timeout: **30_000** ms.
 - Serialization: `JSON.stringify` / `JSON.parse` only (zero npm dependencies).
+- Inbound JSON uses a **safe parse** reviver (always on): drops `__proto__`, `constructor`, and `prototype` keys.
+- Optional **`strictEnvelope: true`** on `ServerOptions` / `ClientOptions`: reject envelopes over `maxEnvelopeBytes` (default: max frame payload) or deeper than `maxEnvelopeDepth` (default: 64).
+
+#### Trust model (UDS local IPC)
+
+- Peers are **local processes** on the same host connected via a filesystem or abstract UDS path — equivalent trust to any code that can open that socket.
+- **Not** a substitute for TLS, auth, or ACLs on internet-facing services; v1 provides no cryptographic peer identity.
+- Safe parse and optional strict limits are **defense in depth** against malformed or hostile JSON from a connected peer, not a full sandbox.
 
 #### Example
 
@@ -154,7 +162,10 @@ Implementation: `src/protocol/envelope.ts` (`encodeEmit`, `encodeRequest`, `enco
 ```typescript
 export interface ConnectionOptions {
     id: string; // Logical name or filesystem path (see §4.1 path resolution)
-    adapter?: 'bun' | 'node'; // v1: only 'bun' (default); 'node' throws until implemented
+    adapter?: 'bun' | 'node'; // omitted: Bun if available, else node:net
+    strictEnvelope?: boolean;
+    maxEnvelopeBytes?: number;
+    maxEnvelopeDepth?: number;
 }
 
 export interface ServerOptions extends ConnectionOptions {

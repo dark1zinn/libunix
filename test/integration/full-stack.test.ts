@@ -167,4 +167,36 @@ describe('integration: full stack', () => {
         await client.disconnect();
         await server.close();
     });
+
+    test('strictEnvelope allows normal request/response', async () => {
+        type EchoEvents = {
+            echo: { msg: string };
+            [key: string]: unknown;
+        };
+
+        const server = await Server.create<EchoEvents>({
+            id: socketPath,
+            adapter: 'bun',
+            strictEnvelope: true,
+        });
+        const ready = Promise.withResolvers<void>();
+        server.on('connection', (peer) => {
+            peer.onRequest('echo', (data) => ({ echo: data.msg }));
+            ready.resolve();
+        });
+
+        const client = await Client.connect<EchoEvents>({
+            id: socketPath,
+            adapter: 'bun',
+            strictEnvelope: true,
+        });
+        await ready.promise;
+
+        await expect(client.request('echo', { msg: 'strict' })).resolves.toEqual({
+            echo: 'strict',
+        });
+
+        await client.disconnect();
+        await server.close();
+    });
 });

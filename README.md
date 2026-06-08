@@ -96,6 +96,14 @@ bun run build   # tsdown → dist/
 
 Benchmarks (hyperfine, requires Nix dev shell): `bun run bench`. Tracked baselines live in [docs/benchmarks/](docs/benchmarks/).
 
+## Security / trust model
+
+libunix targets **local Unix domain socket IPC** between processes on the same machine. Any process that can connect to the socket path is treated as a trusted peer (similar to any local service bound to a world-readable socket file).
+
+- Inbound envelopes always use **safe JSON parsing** (`__proto__` / `constructor` / `prototype` keys are dropped).
+- Optional **`strictEnvelope: true`** on `Server.create` / `Client.connect` rejects oversized or deeply nested JSON (`maxEnvelopeBytes`, `maxEnvelopeDepth`).
+- This is **not** authentication or encryption; do not expose UDS endpoints to untrusted networks.
+
 Publish tarball is built with [tsdown](https://tsdown.dev/guide/getting-started); `prepublishOnly` runs format check, tests, and build.
 
 ## License
