@@ -2,7 +2,7 @@
     "name": "libunix",
     "author": "dark1zinn",
     "license": "MIT",
-    "version": "0.1.0",
+    "version": "0.1.3",
     "description": "An abstraction-layer library for Unix domain socket (UDS) IPC on Bun and Node.js.",
     "keywords": [
         "unix",
