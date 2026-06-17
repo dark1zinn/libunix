@@ -3,6 +3,7 @@ src/
 test/
 docs/
 PLAN.md
+README.md
 tsdown.config.ts
 tsconfig.json
 .prettierrc.json
