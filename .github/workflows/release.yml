@@ -72,10 +72,16 @@ jobs:
                     exit 1
                   fi
 
+            - name: Configure npm authentication
+              run: |
+                  echo "//registry.npmjs.org/:_authToken=${NPM_CONFIG_TOKEN}" > "${HOME}/.npmrc"
+              env:
+                  NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+
             - name: Publish to npm
               run: bun publish --access public
               env:
-                  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+                  NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
 
             - name: Create GitHub Release
               uses: softprops/action-gh-release@v3
